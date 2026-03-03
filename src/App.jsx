@@ -494,7 +494,7 @@ export default function RoomPicker() {
       >
         <img
           ref={imgRef}
-          src="/idris_map.png"
+          src={`${import.meta.env.BASE_URL}idris_map.png`}
           alt="IDRIS-P Main Deck map"
           style={{ width: "100%", height: "100%", objectFit: "contain", cursor: "crosshair" }}
           onClick={handleMapClick}
