@@ -8,6 +8,10 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    # the default token now needs write permission to push to gh-pages
+    permissions:
+      contents: write
+      pages: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,6 +24,6 @@ jobs:
         with:
           publish_dir: ./dist
           publish_branch: gh-pages
-          # use a personal access token stored under GH_PAGES_PAT; ensure the
-          # secret is created in the repo or org before running the workflow
-          github_token: ${{ secrets.GH_PAGES_PAT }}
+          # use the built-in GITHUB_TOKEN (safer than a PAT) or set
+          # GH_PAGES_PAT with repo scope if you prefer a personal token
+          github_token: ${{ secrets.GITHUB_TOKEN }}}]}
