@@ -26,4 +26,4 @@ jobs:
           publish_branch: gh-pages
           # use the built-in GITHUB_TOKEN (safer than a PAT) or set
           # GH_PAGES_PAT with repo scope if you prefer a personal token
-          github_token: ${{ secrets.GITHUB_TOKEN }}}]}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
