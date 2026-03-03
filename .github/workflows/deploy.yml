@@ -20,4 +20,6 @@ jobs:
         with:
           publish_dir: ./dist
           publish_branch: gh-pages
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # use a personal access token stored under GH_PAGES_PAT; ensure the
+          # secret is created in the repo or org before running the workflow
+          github_token: ${{ secrets.GH_PAGES_PAT }}
