@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect } from "react";
+import "./App.css";
 
 /**
  * Setup:
@@ -271,112 +272,6 @@ export default function RoomPicker() {
   const [picked, setPicked] = useState(null); // room object
   const [lastError, setLastError] = useState("");
 
-  const roomPx = useMemo(() => {
-    const el = imgRef.current;
-    if (!el) return [];
-
-    const rect = el.getBoundingClientRect();
-    return ROOMS.map((r) => ({
-      ...r,
-      px: {
-        x: (r.x / 100) * rect.width,
-        y: (r.y / 100) * rect.height,
-      },
-    }));
-  }, [imgRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // state for editable room rectangles (percentages)
-  const DEFAULT_SIZE = 8;
-  const [rects, setRects] = useState(() => {
-    const saved = window.localStorage.getItem("idris-room-rects");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {}
-    }
-    const init = {};
-    ROOMS.forEach((r) => {
-      init[r.id] = {
-        left: r.x - DEFAULT_SIZE / 2,
-        top: r.y - DEFAULT_SIZE / 2,
-        width: DEFAULT_SIZE,
-        height: DEFAULT_SIZE,
-      };
-    });
-    return init;
-  });
-
-  const draggingRef = useRef(null);
-
-  function handleMouseMove(e) {
-    if (!draggingRef.current) return;
-    const { id, corner, startX, startY, origRect } = draggingRef.current;
-    const el = imgRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const dx = ((e.clientX - startX) / rect.width) * 100;
-    const dy = ((e.clientY - startY) / rect.height) * 100;
-    let { left, top, width, height } = origRect;
-    switch (corner) {
-      case "tl":
-        left += dx;
-        top += dy;
-        width -= dx;
-        height -= dy;
-        break;
-      case "tr":
-        top += dy;
-        width += dx;
-        height -= dy;
-        break;
-      case "bl":
-        left += dx;
-        width -= dx;
-        height += dy;
-        break;
-      case "br":
-        width += dx;
-        height += dy;
-        break;
-      default:
-        break;
-    }
-    width = Math.max(width, 1);
-    height = Math.max(height, 1);
-    setRects((r) => ({ ...r, [id]: { left, top, width, height } }));
-  }
-
-  function handleMouseUp() {
-    draggingRef.current = null;
-  }
-
-  function startDrag(id, corner, e) {
-    e.stopPropagation();
-    draggingRef.current = {
-      id,
-      corner,
-      startX: e.clientX,
-      startY: e.clientY,
-      origRect: rects[id],
-    };
-  }
-
-  useEffect(() => {
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [rects]);
-
-  // save rects to localStorage whenever they change
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("idris-room-rects", JSON.stringify(rects));
-    } catch {}
-  }, [rects]);
-
   function handleMapClick(e) {
     const el = imgRef.current;
     if (!el) return;
@@ -391,7 +286,8 @@ export default function RoomPicker() {
 
     // check if point is inside any room rectangle
     let hitRect = null;
-    Object.entries(rects).forEach(([id, r]) => {
+    ROOMS.forEach((room) => {
+      const r = room.rect;
       if (
         pctX >= r.left &&
         pctX <= r.left + r.width &&
@@ -405,22 +301,21 @@ export default function RoomPicker() {
     if (!hitRect) {
       // find nearest rect and clamp into it
       let best = null;
-      Object.entries(rects).forEach(([id, r]) => {
-        // compute distance from point to rectangle (0 if inside)
+      ROOMS.forEach((room) => {
+        const r = room.rect;
         let dx = 0;
         if (pctX < r.left) dx = r.left - pctX;
         else if (pctX > r.left + r.width) dx = pctX - (r.left + r.width);
         let dy = 0;
         if (pctY < r.top) dy = r.top - pctY;
         else if (pctY > r.top + r.height) dy = pctY - (r.top + r.height);
-        const dist = Math.hypot(dx, dy);
-        if (best === null || dist < best.dist) {
-          best = { dist, rect: r };
+        const d = Math.hypot(dx, dy);
+        if (best === null || d < best.dist) {
+          best = { dist: d, rect: r };
         }
       });
       if (best) {
         const r = best.rect;
-        // clamp pctX/pctY into that rect
         const clampedPctX = clamp(pctX, r.left, r.left + r.width);
         const clampedPctY = clamp(pctY, r.top, r.top + r.height);
         x = (clampedPctX / 100) * domRect.width;
@@ -439,7 +334,14 @@ export default function RoomPicker() {
       return;
     }
 
-    const eligible = roomPx.filter((r) => dist(r.px, clickPx) >= minDistance);
+    const el = imgRef.current;
+    if (!el) return;
+    const domRect = el.getBoundingClientRect();
+
+    const eligible = ROOMS.filter((r) => {
+      const px = { x: (r.x / 100) * domRect.width, y: (r.y / 100) * domRect.height };
+      return dist(px, clickPx) >= minDistance;
+    });
 
     if (eligible.length === 0) {
       setPicked(null);
@@ -450,290 +352,190 @@ export default function RoomPicker() {
     }
 
     const choice = eligible[Math.floor(Math.random() * eligible.length)];
-    setPicked(choice);
+    const choicePx = {
+      x: (choice.x / 100) * domRect.width,
+      y: (choice.y / 100) * domRect.height,
+    };
+    setPicked({ ...choice, px: choicePx });
     setLastError("");
   }
 
   return (
-    <div
-      style={{
-        fontFamily: "system-ui, Arial",
-        padding: 0,
-        margin: 0,
-        height: "100vh",
-        width: "100vw",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      {/* title can float above the map to save space */}
-      <h1
-        style={{
-          margin: "0",
-          position: "absolute",
-          top: 16,
-          left: 16,
-          color: "white",
-          textShadow: "0 0 4px rgba(0,0,0,0.7)",
-          zIndex: 2,
-        }}
-      >
-        IDRIS-P Room Picker
-      </h1>
+    <div className="app">
+      <h1 className="app-title">IDRIS-P Room Picker</h1>
 
-      {/* map fills the entire viewport */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: "black",
-        }}
-      >
+      <div className="map-container">
         <img
           ref={imgRef}
           src={`${import.meta.env.BASE_URL}idris_map.png`}
           alt="IDRIS-P Main Deck map"
-          style={{ width: "100%", height: "100%", objectFit: "contain", cursor: "crosshair" }}
+          className="map-image"
           onClick={handleMapClick}
           draggable={false}
         />
 
-        {/* editable room boundaries */}
-        {/* {Object.entries(rects).map(([id, rect]) => {
-          const room = ROOMS.find((r) => r.id === id);
-          return (
-            <div
-              key={id}
-              style={{
-                position: "absolute",
-                left: `${rect.left}%`,
-                top: `${rect.top}%`,
-                width: `${rect.width}%`,
-                height: `${rect.height}%`,
-                border: "2px dashed yellow",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "yellow",
-                fontSize: "0.75rem",
-                textAlign: "center",
-                padding: "2px",
-              }}
-            >
-              {room?.name}
-              {[
-                ["tl", { left: 0, top: 0, cursor: "nwse-resize" }],
-                ["tr", { right: 0, top: 0, cursor: "nesw-resize" }],
-                ["bl", { left: 0, bottom: 0, cursor: "nesw-resize" }],
-                ["br", { right: 0, bottom: 0, cursor: "nwse-resize" }],
-              ].map(([corner, pos]) => (
-                <div
-                  key={corner}
-                  onMouseDown={(e) => startDrag(id, corner, e)}
-                  style={{
-                    position: "absolute",
-                    width: 8,
-                    height: 8,
-                    background: "yellow",
-                    ...pos,
-                    margin: -4,
-                    zIndex: 3,
-                  }}
-                />
-              ))}
-            </div>
-          );
-        })} */}
-
-        {/* Click marker */}
         {clickPx && (
-          <Marker
-            x={clickPx.x}
-            y={clickPx.y}
-            label="You are here"
-            ring
-          />
+          <Marker x={clickPx.x} y={clickPx.y} label="You are here" ring />
         )}
 
-        {/* Picked room marker */}
         {picked && (
-          <Marker
-            x={picked.px.x}
-            y={picked.px.y}
-            label={picked.name}
-          />
+          <Marker x={picked.px.x} y={picked.px.y} label={picked.name} />
         )}
       </div>
 
-      {/* controls overlayed on top of map, moved to bottom-left */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 16,
-          left: 16,
-          width: 200,            // reduced size ~40%
-          borderRadius: 12,
-          padding: 10,
-          background: "rgba(0,0,0,0.65)",
-          color: "#fff",
-          boxShadow: "0 2px 10px rgba(0,0,0,0.5)",
-          zIndex: 2,
-          fontSize: "0.85rem",   // slightly smaller text
-        }}
-      >
-          <div style={{ display: "grid", gap: 10 }}>
-            <div>
-              <div style={{ fontWeight: 600, marginBottom: 6, color: "#fff" }}>Minimum distance</div>
-              <input
-                type="range"
-                min={0}
-                max={500}
-                step={5}
-                value={minDistance}
-                onChange={(e) => setMinDistance(Number(e.target.value))}
-                style={{ width: "100%" }}
-              />
-              <div style={{ opacity: 0.8, marginTop: 6, color: "#fff" }}>{minDistance}px</div>
-              <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6, color: "#fff" }}>
-                Distance is measured in <b>on-screen pixels</b> (what you see), so resizing the map changes distances.
-              </div>
+      <div className="controls-panel">
+        <div style={{ display: "grid", gap: 10 }}>
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Minimum distance</div>
+            <input
+              type="range"
+              min={0}
+              max={500}
+              step={5}
+              value={minDistance}
+              onChange={(e) => setMinDistance(Number(e.target.value))}
+              style={{ width: "100%" }}
+            />
+            <div style={{ opacity: 0.8, marginTop: 6 }}>{minDistance}px</div>
+            <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
+              Distance is measured in <b>on-screen pixels</b> (what you see), so resizing the map changes distances.
             </div>
-
-            <button
-              onClick={pickRoom}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 8,
-                border: "1px solid rgba(255,255,255,0.5)",
-                background: "rgba(255,255,255,0.15)",
-                color: "#fff",
-                cursor: "pointer",
-                fontWeight: 700,
-                fontSize: "0.9rem",
-              }}
-            >
-              Pick a random room
-            </button>
-            {/* <button
-              onClick={() => {
-                const data = ROOMS.map((r) => {
-                  const rc = rects[r.id];
-                  return {
-                    ...r,
-                    x: rc.left + rc.width / 2,
-                    y: rc.top + rc.height / 2,
-                    rect: rc,
-                  };
-                });
-                const str = JSON.stringify(data, null, 2);
-                navigator.clipboard.writeText(str).then(() => {
-                  alert("Coordinates copied to clipboard");
-                });
-              }}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 8,
-                border: "1px solid rgba(255,255,255,0.5)",
-                background: "rgba(255,255,255,0.15)",
-                color: "#fff",
-                cursor: "pointer",
-                fontWeight: 700,
-                fontSize: "0.9rem",
-                marginTop: 6,
-              }}
-            >
-              Export coords
-            </button> */}
-
-            <div style={{ fontSize: 14, color: "#fff" }}>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Result</div>
-              {picked ? (
-                <div>
-                  <div style={{ fontSize: 16 }}>{picked.name}</div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>
-                    ({picked.x.toFixed(1)}%, {picked.y.toFixed(1)}%)
-                  </div>
-                </div>
-              ) : (
-                <div style={{ opacity: 0.75 }}>No room selected yet.</div>
-              )}
-            </div>
-
-            {lastError && (
-              <div
-                style={{
-                  background: "rgba(255,0,0,0.08)",
-                  border: "1px solid rgba(255,0,0,0.25)",
-                  padding: 10,
-                  borderRadius: 10,
-                  color: "#7a0b0b",
-                }}
-              >
-                {lastError}
-              </div>
-            )}
-
           </div>
+
+          <button onClick={pickRoom} className="panel-btn">
+            Pick a random room
+          </button>
+
+          <div style={{ fontSize: 14 }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Result</div>
+            {picked ? (
+              <div>
+                <div style={{ fontSize: 16 }}>{picked.name}</div>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>
+                  ({picked.x.toFixed(1)}%, {picked.y.toFixed(1)}%)
+                </div>
+              </div>
+            ) : (
+              <div style={{ opacity: 0.75 }}>No room selected yet.</div>
+            )}
+          </div>
+
+          {lastError && (
+            <div className="error-box">
+              {lastError}
+            </div>
+          )}
         </div>
       </div>
 
+      <Timer />
+    </div>
+  );
+}
+
+function playBeep() {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const times = [0, 0.25, 0.5];
+  times.forEach((t) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.3, ctx.currentTime + t);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.2);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(ctx.currentTime + t);
+    osc.stop(ctx.currentTime + t + 0.2);
+  });
+}
+
+function Timer() {
+  const [seconds, setSeconds] = useState(90);
+  const [running, setRunning] = useState(false);
+  const [remaining, setRemaining] = useState(90);
+  const intervalRef = useRef(null);
+
+  function start() {
+    if (running) return;
+    setRemaining(seconds);
+    setRunning(true);
+  }
+
+  useEffect(() => {
+    if (!running) return;
+    intervalRef.current = setInterval(() => {
+      setRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(intervalRef.current);
+          setRunning(false);
+          playBeep();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(intervalRef.current);
+  }, [running]);
+
+  const stop = () => {
+    clearInterval(intervalRef.current);
+    setRunning(false);
+  };
+
+  const reset = () => {
+    clearInterval(intervalRef.current);
+    setRunning(false);
+    setRemaining(seconds);
+  };
+
+  const mins = Math.floor(remaining / 60);
+  const secs = remaining % 60;
+  const display = `${mins}:${secs.toString().padStart(2, "0")}`;
+  const isAlarm = !running && remaining === 0;
+
+  return (
+    <div className="timer-panel">
+      <div style={{ fontWeight: 700, marginBottom: 8 }}>Timer</div>
+
+      <div className="timer-display" style={{ color: isAlarm ? "#ff4444" : "#fff" }}>
+        {display}
+      </div>
+
+      {!running && (
+        <div className="timer-adjust">
+          <button
+            onClick={() => { setSeconds((s) => Math.max(30, s - 30)); setRemaining((r) => running ? r : Math.max(30, seconds - 30)); }}
+            className="panel-btn timer-adjust-btn"
+          >-</button>
+          <span style={{ fontSize: "0.8rem", opacity: 0.8 }}>{Math.floor(seconds / 60)}:{(seconds % 60).toString().padStart(2, "0")}</span>
+          <button
+            onClick={() => { setSeconds((s) => Math.min(600, s + 30)); setRemaining((r) => running ? r : Math.min(600, seconds + 30)); }}
+            className="panel-btn timer-adjust-btn"
+          >+</button>
+        </div>
+      )}
+
+      <div className="timer-buttons" style={{ gridTemplateColumns: running ? "1fr 1fr" : "1fr" }}>
+        {!running ? (
+          <button onClick={start} className="panel-btn">Start</button>
+        ) : (
+          <>
+            <button onClick={stop} className="panel-btn">Stop</button>
+            <button onClick={reset} className="panel-btn">Reset</button>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
 function Marker({ x, y, label, ring = false }) {
   return (
-    <div
-      style={{
-        position: "absolute",
-        left: x,
-        top: y,
-        transform: "translate(-50%, -50%)",
-        pointerEvents: "none",
-      }}
-    >
-      {/* dot */}
-      <div
-        style={{
-          width: 12,
-          height: 12,
-          borderRadius: 999,
-          background: "red",
-          boxShadow: "0 2px 10px rgba(0,0,0,0.35)",
-          position: "relative",
-        }}
-      >
-        {ring && (
-          <div
-            style={{
-              position: "absolute",
-              inset: -10,
-              borderRadius: 999,
-              border: "2px solid rgba(255,0,0,0.45)",
-              background: "rgba(255,0,0,0.07)",
-            }}
-          />
-        )}
+    <div className="marker" style={{ left: x, top: y }}>
+      <div className="marker-dot">
+        {ring && <div className="marker-ring" />}
       </div>
-
-      {/* label */}
-      <div
-        style={{
-          marginTop: 8,
-          background: "rgba(0,0,0,0.75)",
-          color: "white",
-          padding: "4px 8px",
-          borderRadius: 999,
-          fontSize: 12,
-          maxWidth: 220,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-        title={label}
-      >
+      <div className="marker-label" title={label}>
         {label}
       </div>
     </div>
