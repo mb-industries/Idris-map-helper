@@ -153,7 +153,7 @@ const ROOMS = [
       "left": 75.90625,
       "top": 41.977046671767404,
       "width": 8.4296875,
-      "height": 10.75439938791125
+      "height": 11.351185921958681
     }
   },
   {
@@ -162,10 +162,10 @@ const ROOMS = [
     "x": 93.19531250089406,
     "y": 49.121652521296106,
     "rect": {
-      "left": 25.39062500178814,
-      "top": 44.57842387146136,
-      "width": 15.60937499821186,
-      "height": 9.086457299669494
+      "left": 84.921875,
+      "top": 41.69854628921193,
+      "width": 6.0546875,
+      "height": 14.843152257077278
     }
   },
   {
@@ -201,7 +201,7 @@ const ROOMS = [
       "left": 70.5078125,
       "top": 19.852333588370314,
       "width": 4.875000000000002,
-      "height": 1.4200459066564655
+      "height": 2.2593726090283077
     }
   },
   {
@@ -234,10 +234,10 @@ const ROOMS = [
     "x": 66,
     "y": 22,
     "rect": {
-      "left": 62,
-      "top": 18,
-      "width": 8,
-      "height": 8
+      "left": 58.2421875,
+      "top": 13.771996939556235,
+      "width": 5.507812499999993,
+      "height": 12.228003060443765
     }
   },
   {
@@ -246,10 +246,10 @@ const ROOMS = [
     "x": 67,
     "y": 91,
     "rect": {
-      "left": 63,
-      "top": 87,
-      "width": 8,
-      "height": 8
+      "left": 55.2734375,
+      "top": 68.40091813312931,
+      "width": 8.0078125,
+      "height": 15.914307574598311
     }
   }
 ];
@@ -271,6 +271,77 @@ export default function RoomPicker() {
   const [minDistance, setMinDistance] = useState(180); // pixels
   const [picked, setPicked] = useState(null); // room object
   const [lastError, setLastError] = useState("");
+  const [showBoundaries, setShowBoundaries] = useState(false);
+  const [rooms, setRooms] = useState(ROOMS);
+  const [draggingCorner, setDraggingCorner] = useState(null); // {roomId, corner}
+  const [showAddForm, setShowAddForm] = useState(false);
+  // const [newRoom, setNewRoom] = useState({
+  //   id: "",
+  //   name: "",
+  //   x: 50,
+  //   y: 50,
+  //   rect: { left: 40, top: 40, width: 20, height: 20 },
+  // });
+
+  // Handle corner drag start
+  function handleCornerMouseDown(e, roomId, corner) {
+    e.stopPropagation();
+    setDraggingCorner({ roomId, corner });
+  }
+
+  // Handle mouse move for corner dragging
+  useEffect(() => {
+    if (!draggingCorner) return;
+
+    function handleMouseMove(e) {
+      const el = imgRef.current;
+      if (!el) return;
+
+      const domRect = el.getBoundingClientRect();
+      const pctX = ((e.clientX - domRect.left) / domRect.width) * 100;
+      const pctY = ((e.clientY - domRect.top) / domRect.height) * 100;
+
+      setRooms((prevRooms) =>
+        prevRooms.map((room) => {
+          if (room.id !== draggingCorner.roomId) return room;
+
+          const r = { ...room.rect };
+          const corner = draggingCorner.corner;
+
+          if (corner.includes("top")) {
+            const oldBottom = r.top + r.height;
+            r.top = Math.max(0, Math.min(pctY, oldBottom - 0.5));
+            r.height = oldBottom - r.top;
+          }
+          if (corner.includes("bottom")) {
+            r.height = Math.max(0.5, Math.min(100, pctY) - r.top);
+          }
+          if (corner.includes("left")) {
+            const oldRight = r.left + r.width;
+            r.left = Math.max(0, Math.min(pctX, oldRight - 0.5));
+            r.width = oldRight - r.left;
+          }
+          if (corner.includes("right")) {
+            r.width = Math.max(0.5, Math.min(100, pctX) - r.left);
+          }
+
+          return { ...room, rect: r };
+        })
+      );
+    }
+
+    function handleMouseUp() {
+      setDraggingCorner(null);
+    }
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [draggingCorner]);
 
   function handleMapClick(e) {
     const el = imgRef.current;
@@ -286,7 +357,7 @@ export default function RoomPicker() {
 
     // check if point is inside any room rectangle
     let hitRect = null;
-    ROOMS.forEach((room) => {
+    rooms.forEach((room) => {
       const r = room.rect;
       if (
         pctX >= r.left &&
@@ -301,7 +372,7 @@ export default function RoomPicker() {
     if (!hitRect) {
       // find nearest rect and clamp into it
       let best = null;
-      ROOMS.forEach((room) => {
+      rooms.forEach((room) => {
         const r = room.rect;
         let dx = 0;
         if (pctX < r.left) dx = r.left - pctX;
@@ -328,6 +399,55 @@ export default function RoomPicker() {
     setLastError("");
   }
 
+  function exportRooms() {
+    const dataStr = JSON.stringify(rooms, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "rooms.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function resetAddForm() {
+    setNewRoom({
+      id: "",
+      name: "",
+      x: 50,
+      y: 50,
+      rect: { left: 40, top: 40, width: 20, height: 20 },
+    });
+    setShowAddForm(false);
+  }
+
+  function saveNewRoom() {
+    if (!newRoom.id || !newRoom.name) {
+      alert("Please fill in ID and Name");
+      return;
+    }
+    if (rooms.find((r) => r.id === newRoom.id)) {
+      alert("Room ID already exists");
+      return;
+    }
+    setRooms([...rooms, { ...newRoom }]);
+    resetAddForm();
+  }
+
+  function updateNewRoom(field, value) {
+    if (field.startsWith("rect.")) {
+      const rectField = field.split(".")[1];
+      setNewRoom({
+        ...newRoom,
+        rect: { ...newRoom.rect, [rectField]: parseFloat(value) },
+      });
+    } else {
+      setNewRoom({ ...newRoom, [field]: value });
+    }
+  }
+
   function pickRoom() {
     if (!clickPx) {
       setLastError("Click a spot on the map first.");
@@ -338,7 +458,7 @@ export default function RoomPicker() {
     if (!el) return;
     const domRect = el.getBoundingClientRect();
 
-    const eligible = ROOMS.filter((r) => {
+    const eligible = rooms.filter((r) => {
       const px = { x: (r.x / 100) * domRect.width, y: (r.y / 100) * domRect.height };
       return dist(px, clickPx) >= minDistance;
     });
@@ -374,6 +494,31 @@ export default function RoomPicker() {
           draggable={false}
         />
 
+        {showBoundaries &&
+          rooms.map((room) => (
+            <div key={room.id} className="boundary-overlay" style={{
+              left: `${room.rect.left}%`,
+              top: `${room.rect.top}%`,
+              width: `${room.rect.width}%`,
+              height: `${room.rect.height}%`,
+            }}>
+              <div className="boundary-rect" />
+              <div className="boundary-label">{room.name}</div>
+              
+              {/* Resize handles */}
+              <div className="corner-handle corner-tl" onMouseDown={(e) => handleCornerMouseDown(e, room.id, "top-left")} />
+              <div className="corner-handle corner-tr" onMouseDown={(e) => handleCornerMouseDown(e, room.id, "top-right")} />
+              <div className="corner-handle corner-bl" onMouseDown={(e) => handleCornerMouseDown(e, room.id, "bottom-left")} />
+              <div className="corner-handle corner-br" onMouseDown={(e) => handleCornerMouseDown(e, room.id, "bottom-right")} />
+              
+              {/* Edge handles */}
+              <div className="edge-handle edge-t" onMouseDown={(e) => handleCornerMouseDown(e, room.id, "top")} />
+              <div className="edge-handle edge-b" onMouseDown={(e) => handleCornerMouseDown(e, room.id, "bottom")} />
+              <div className="edge-handle edge-l" onMouseDown={(e) => handleCornerMouseDown(e, room.id, "left")} />
+              <div className="edge-handle edge-r" onMouseDown={(e) => handleCornerMouseDown(e, room.id, "right")} />
+            </div>
+          ))}
+
         {clickPx && (
           <Marker x={clickPx.x} y={clickPx.y} label="You are here" ring />
         )}
@@ -382,6 +527,94 @@ export default function RoomPicker() {
           <Marker x={picked.px.x} y={picked.px.y} label={picked.name} />
         )}
       </div>
+
+      {showAddForm && (
+        <div className="add-boundary-panel">
+          <h3>Add New Boundary</h3>
+          <div className="add-form-inputs">
+            <label>
+              ID:
+              <input
+                type="text"
+                value={newRoom.id}
+                onChange={(e) => updateNewRoom("id", e.target.value)}
+                placeholder="e.g., med_bay_2"
+              />
+            </label>
+            <label>
+              Name:
+              <input
+                type="text"
+                value={newRoom.name}
+                onChange={(e) => updateNewRoom("name", e.target.value)}
+                placeholder="e.g., Medical Bay 2"
+              />
+            </label>
+            <label>
+              Center X (%):
+              <input
+                type="number"
+                step="0.1"
+                value={newRoom.x}
+                onChange={(e) => updateNewRoom("x", e.target.value)}
+              />
+            </label>
+            <label>
+              Center Y (%):
+              <input
+                type="number"
+                step="0.1"
+                value={newRoom.y}
+                onChange={(e) => updateNewRoom("y", e.target.value)}
+              />
+            </label>
+            <label>
+              Left (%):
+              <input
+                type="number"
+                step="0.1"
+                value={newRoom.rect.left}
+                onChange={(e) => updateNewRoom("rect.left", e.target.value)}
+              />
+            </label>
+            <label>
+              Top (%):
+              <input
+                type="number"
+                step="0.1"
+                value={newRoom.rect.top}
+                onChange={(e) => updateNewRoom("rect.top", e.target.value)}
+              />
+            </label>
+            <label>
+              Width (%):
+              <input
+                type="number"
+                step="0.1"
+                value={newRoom.rect.width}
+                onChange={(e) => updateNewRoom("rect.width", e.target.value)}
+              />
+            </label>
+            <label>
+              Height (%):
+              <input
+                type="number"
+                step="0.1"
+                value={newRoom.rect.height}
+                onChange={(e) => updateNewRoom("rect.height", e.target.value)}
+              />
+            </label>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={saveNewRoom} className="panel-btn">
+              Save
+            </button>
+            <button onClick={resetAddForm} className="panel-btn">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="controls-panel">
         <div style={{ display: "grid", gap: 10 }}>
@@ -405,6 +638,23 @@ export default function RoomPicker() {
           <button onClick={pickRoom} className="panel-btn">
             Pick a random room
           </button>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={showBoundaries}
+              onChange={(e) => setShowBoundaries(e.target.checked)}
+            />
+            Show boundaries
+          </label>
+
+          <button onClick={exportRooms} className="panel-btn" style={{ fontSize: "0.85rem" }}>
+            Export Boundaries
+          </button>
+
+          {/* <button onClick={() => setShowAddForm(true)} className="panel-btn" style={{ fontSize: "0.85rem" }}>
+            Add Boundary
+          </button> */}
 
           <div style={{ fontSize: 14 }}>
             <div style={{ fontWeight: 700, marginBottom: 4 }}>Result</div>
